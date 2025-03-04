@@ -32,7 +32,8 @@ class HumanEval(DeepEvalBaseBenchmark):
         self.predictions: Optional[pd.DataFrame] = None
         self.task_scores: Optional[pd.DataFrame] = None
         self.overall_score: Optional[float] = None
-        self.verbose_mode: bool = (False,)
+        #self.verbose_mode: bool = (False,)
+        self.verbose_mode: bool = verbose_mode
 
     def evaluate(self, model: DeepEvalBaseLLM, k: int) -> Dict:
         with capture_benchmark_run("HumanEval", len(self.tasks)):
@@ -78,19 +79,36 @@ class HumanEval(DeepEvalBaseBenchmark):
             )
             print(f"Overall HumanEval Accuracy: {overall_accuracy}")
 
+            #print('predictions_row len:', len(predictions_row[0]))
+
+            #print('predictions_row:', predictions_row[0])
+
             # Create a DataFrame from task_results_data
             # Columns: 'Task', 'Input', 'Prediction', 'Score'
-            self.predictions = pd.DataFrame(
-                predictions_row,
-                columns=[
-                    "Task",
-                    "Input",
-                    "Prediction",
-                    "Correct",
-                    "Expected Output",
-                    "Score",
-                ],
-            )
+            
+            if len(predictions_row) > 0 and len(predictions_row[0]) == 5:
+                self.predictions = pd.DataFrame(
+                    predictions_row,
+                    columns=[
+                        "Task",
+                        "Input",
+                        "Prediction",
+                        "Expected Output",
+                        "Score",
+                    ],
+                )
+            else:
+                self.predictions = pd.DataFrame(
+                    predictions_row,
+                    columns=[
+                        "Task",
+                        "Input",
+                        "Prediction",
+                        "Correct",
+                        "Expected Output",
+                        "Score",
+                    ],
+                )
             self.task_scores = pd.DataFrame(
                 scores_row, columns=["Task", "Score"]
             )
@@ -125,6 +143,8 @@ class HumanEval(DeepEvalBaseBenchmark):
                     exec(golden.expected_output)
                     c += 1
                 except AssertionError as e:
+                    pass
+                except Exception as e:
                     pass
             self.c[task.value] = c
             self.functions[task.value] = functions
