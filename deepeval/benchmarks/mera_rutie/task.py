@@ -1,6 +1,5 @@
 from enum import Enum
 
 
-class ParusQATask(Enum):
-    Cause = "cause"
-    Effect = "effect"
+class RutieQATask(Enum):
+    Dialog = "dialog"

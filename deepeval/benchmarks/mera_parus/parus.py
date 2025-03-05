@@ -30,7 +30,7 @@ class ParusQA(DeepEvalBaseBenchmark):
     ):
         from deepeval.scorer import Scorer
 
-        assert n_shots <= 5, "MathLogicQA only supports n_shots <= 5"
+        assert n_shots <= 5, "ParusQA only supports n_shots <= 5"
         super().__init__(**kwargs)
         self.tasks: List[ParusQATask] = (
             list(ParusQATask) if tasks is None else tasks

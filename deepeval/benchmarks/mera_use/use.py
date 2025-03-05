@@ -11,17 +11,14 @@ from deepeval.benchmarks.utils import should_use_batch
 from deepeval.benchmarks.schema import BaseModel, Literal
 from deepeval.telemetry import capture_benchmark_run
 
-from .task import RutieQATask
-from .template import RutieQATemplate
+from .task import UseQATask
+from .template import UseQATemplate
 
 
-class MultipleChoice12Schema(BaseModel):
-    answer: Literal["1", "2"]
-
-class RutieQA(DeepEvalBaseBenchmark):
+class UseQA(DeepEvalBaseBenchmark):
     def __init__(
         self,
-        tasks: List[RutieQATask] = None,
+        tasks: List[UseQATask] = None,
         n_shots: int = 5,
         n_problems_per_task: Optional[int] = None,
         verbose_mode: bool = False,
@@ -30,17 +27,17 @@ class RutieQA(DeepEvalBaseBenchmark):
     ):
         from deepeval.scorer import Scorer
 
-        #assert n_shots <= 5, "MathLogicQA only supports n_shots <= 5"
+        assert n_shots <= 5, "UseQA only supports n_shots <= 5"
         super().__init__(**kwargs)
-        self.tasks: List[RutieQATask] = (
-            list(RutieQATask) if tasks is None else tasks
+        self.tasks: List[UseQATask] = (
+            list(UseQATask) if tasks is None else tasks
         )
         self.n_problems_per_task: Optional[int] = n_problems_per_task
         self.scorer = Scorer()
         self.n_shots: int = n_shots
         self.predictions: Optional[pd.DataFrame] = None
 
-        self.template = RutieQATemplate()
+        self.template = UseQATemplate()
 
         self.task_scores: Optional[pd.DataFrame] = None
         self.overall_score: Optional[float] = None
@@ -56,7 +53,7 @@ class RutieQA(DeepEvalBaseBenchmark):
     def evaluate(
         self, model: DeepEvalBaseLLM, batch_size: Optional[int] = None
     ) -> Dict:
-        with capture_benchmark_run("RutieQA", len(self.tasks)):
+        with capture_benchmark_run("UseQA", len(self.tasks)):
             overall_correct_predictions = 0
             overall_total_predictions = 0
             predictions_row = []
@@ -104,7 +101,7 @@ class RutieQA(DeepEvalBaseBenchmark):
                     task_correct_predictions / task_total_predictions
                 )
                 print(
-                    f"RutieQA Task Accuracy (task={task.value}): {task_accuracy}"
+                    f"UseQA Task Accuracy (task={task.value}): {task_accuracy}"
                 )
                 scores_row.append((task.value, task_accuracy))
 
@@ -112,7 +109,7 @@ class RutieQA(DeepEvalBaseBenchmark):
             overall_accuracy = (
                 overall_correct_predictions / overall_total_predictions
             )
-            print(f"Overall RutieQA Accuracy: {overall_accuracy}")
+            print(f"Overall UseQA Accuracy: {overall_accuracy}")
 
             # Create a DataFrame from task_results_data
             # Columns: 'Task', 'Input', 'Prediction', 'Score'
@@ -135,23 +132,16 @@ class RutieQA(DeepEvalBaseBenchmark):
 
     def predict(self, model: DeepEvalBaseLLM, golden: Golden) -> Dict:
         # Define prompt template
-        # prompt: dict = self.template.generate_output(
-        #     input=golden.input,
-        #     n_shots=self.n_shots,
-        #     index=golden.index
-        # )
-        prompt = golden.input
+        prompt: dict = self.template.generate_output(
+            input=golden.input,
+            n_shots=self.n_shots,
+            index=golden.index
+        )
 
         # Enforced model generation
-        try:
-            res: MultipleChoice12Schema = model.generate(
-                prompt=prompt, schema=MultipleChoice12Schema
-            )
-            prediction = res.answer
-        except TypeError:
-            if self.confinement_instructions:
-                prompt += f"\n\n{self.confinement_instructions}"
-            prediction = model.generate(prompt)
+        if self.confinement_instructions:
+            prompt += f"\n\n{self.confinement_instructions}"
+        prediction = model.generate(prompt)
 
         # For native models, shouldn't happen but just in case
         if isinstance(prediction, tuple):
@@ -164,27 +154,43 @@ class RutieQA(DeepEvalBaseBenchmark):
         )
         return {"prediction": prediction, "score": score}
 
-    def load_benchmark_dataset(self, task: RutieQATask) -> List[Golden]:
+    def load_benchmark_dataset(self, task: UseQATask) -> List[Golden]:
         if self.dataset:
             dataset = self.dataset
         else:
-            dataset = load_dataset("MERA-evaluation/MERA", 'rutie')
+            dataset = load_dataset("MERA-evaluation/MERA", 'use')
             self.dataset = dataset
 
         # Construct test set
         train_set = dataset["train"]
+        n_shot_indeces = {'text': [1839, 2165, 2094, 1884, 1861, 2360, 1818, 2228, 
+                                   2357, 2479, 2466, 2244, 2281, 2527, 1960],
+                          'multiple_choice_independent_options': [1037, 1257, 1782, 1435, 
+                                                                  991, 1774, 1050, 1185,
+                                                                  1605, 999, 1302, 1001,
+                                                                  1716, 981, 1172],
+                          'multiple_choice_options_within_text': [900, 591, 389, 647,
+                                                                  848, 952, 837, 786,
+                                                                  547, 778, 814, 387,
+                                                                  594, 708, 780],
+                          'multiple_choice_based_on_text': [50, 2, 89, 178, 61, 310,
+                                                            67, 290, 64, 19, 185,
+                                                            121, 87, 56, 231],
+                          'matching': [2580, 2618, 2540, 2546, 2587, 2604,
+                                       2536, 2610, 2601, 2551, 2616, 2583,
+                                       2541, 2543, 2529]
+                          }
+        
+        self.template.create_n_shot_examples(train_set, n_shot_indeces)
 
-        test_set = train_set
-        self.template.create_n_shot_examples(test_set)
-        # test_set = train_set.filter(
-        #     lambda data: data['meta']["task"] == task.value
-        # )
+        test_set = train_set.filter(
+            lambda data: data['meta']["type"] == task.value
+        )
         goldens: List[Golden] = []
-        for index in range(len(test_set)):
-            data = test_set[index]
+        for index, data in enumerate(test_set):
+            input = self.template.format_question(data, include_answer=False)
             expected_output = self.template.format_output(data)
-            input = self.template.format_question(data, n_shots=self.n_shots, index=index)
-            golden = Golden(input=input, expected_output=expected_output)
+            golden = Golden(input=input, expected_output=expected_output, index=index)
             goldens.append(golden)
         return goldens
 

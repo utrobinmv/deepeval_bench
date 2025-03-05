@@ -14,13 +14,14 @@ api_key = 'sk-1234'
 
 model = DeepEvalOpenAI(model=model_name, api_base=base_url, api_key=api_key, temperature=0, max_tokens=1024)
 
-from deepeval.benchmarks.mera_parus.parus import ParusQA
-from deepeval.benchmarks.mera_parus.task import ParusQATask
+from deepeval.benchmarks.mera_rutie.rutie import RutieQA
+from deepeval.benchmarks.mera_rutie.task import RutieQATask
 
-tasks = [ParusQATask.Cause, ParusQATask.Effect]
+tasks = [RutieQATask.Dialog]
 
-#benchmark = ParusQA(tasks=tasks, n_problems_per_task=5)
-benchmark = ParusQA(tasks=tasks)
+#benchmark = RutieQA(tasks=tasks, n_problems_per_task=5)
+#benchmark = RutieQA(tasks=tasks, n_shots=20)
+benchmark = RutieQA(tasks=tasks, n_shots=10)
 
 results = benchmark.evaluate(model=model)
 
