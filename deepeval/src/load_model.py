@@ -73,8 +73,8 @@ class DeepEvalOpenAI(DeepEvalBaseLLM):
 
         return headers, data
 
-    def generate(self, prompt: str, generate_kwargs: dict = {}) -> str:
-        
+    def generate(self, prompt: str): # , generate_kwargs: dict = {}) -> str:
+        generate_kwargs: dict = {}
         headers, data = self._pre_config_request(prompt, generate_kwargs)
 
         response = requests.post(

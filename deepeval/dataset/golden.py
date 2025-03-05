@@ -4,7 +4,6 @@ from deepeval.test_case import ToolCall
 
 
 class Golden(BaseModel):
-    index: int
     input: str
     actual_output: Optional[str] = Field(
         default=None, serialization_alias="actualOutput"
@@ -28,6 +27,9 @@ class Golden(BaseModel):
     )
     source_file: Optional[str] = Field(
         default=None, serialization_alias="sourceFile"
+    )
+    index: Optional[int] = Field(
+        default=None, serialization_alias="indexFile"
     )
 
 

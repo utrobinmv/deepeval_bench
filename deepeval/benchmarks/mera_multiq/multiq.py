@@ -1,65 +1,61 @@
 from datasets import load_dataset
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from tqdm import tqdm
 import pandas as pd
 
 from deepeval.dataset import Golden
 from deepeval.benchmarks.base_benchmark import DeepEvalBaseBenchmark
 from deepeval.models import DeepEvalBaseLLM
-from deepeval.benchmarks.mamuramu.task import MamuramuTask
-from deepeval.benchmarks.mamuramu.template import MamuramuQATemplate
-from deepeval.benchmarks.utils import should_use_batch
 #from deepeval.benchmarks.schema import MultipleChoiceSchemaLower
-from deepeval.benchmarks.schema import BaseModel, Literal
 from deepeval.telemetry import capture_benchmark_run
+from deepeval.metrics.utils import initialize_model
+
+from .task import MultiQTask
+from .template import MultiQTemplate
 
 
-class MultipleChoiceSchema(BaseModel):
-    answer: Literal["A", "B", "C", "D"]
-
-class MamuramuQA(DeepEvalBaseBenchmark):
+class MultiQ(DeepEvalBaseBenchmark):
     def __init__(
         self,
-        tasks: List[MamuramuTask] = None,
-        n_shots: int = 5,
+        tasks: List[MultiQTask] = None,
+        n_shots: int = 3,
         n_problems_per_task: Optional[int] = None,
+        evaluation_model: Optional[Union[str, DeepEvalBaseLLM]] = None,
         verbose_mode: bool = False,
         confinement_instructions: Optional[str] = None,
         **kwargs,
     ):
         from deepeval.scorer import Scorer
 
-        assert n_shots <= 5, "MamuramuQA only supports n_shots <= 5"
+        assert n_shots <= 5, "MultiQ only supports n_shots <= 5"
         super().__init__(**kwargs)
-        self.tasks: List[MamuramuTask] = (
-            list(MamuramuTask) if tasks is None else tasks
+        self.tasks: List[MultiQTask] = (
+            list(MultiQTask) if tasks is None else tasks
         )
         self.n_problems_per_task: Optional[int] = n_problems_per_task
         self.scorer = Scorer()
         self.n_shots: int = n_shots
         self.predictions: Optional[pd.DataFrame] = None
-
-        self.template = MamuramuQATemplate()
-
         self.task_scores: Optional[pd.DataFrame] = None
         self.overall_score: Optional[float] = None
-        self.verbose_mode = verbose_mode
-        # if not confinement_instructions:
-        #     self.confinement_instructions = (
-        #         "Output 'a', 'b', 'c', or 'd'. Full answer not needed."
-        #     )
-        # else:
-        self.confinement_instructions = confinement_instructions
+        self.evaluation_model, self.using_native_evaluation_model = (
+            initialize_model(evaluation_model)
+        )
+        self.verbose_mode: bool = verbose_mode
+        if not confinement_instructions:
+            #self.confinement_instructions = "Output the answer, which should a text segment taken from the context."
+            self.confinement_instructions = ""
+        else:
+            self.confinement_instructions = confinement_instructions
 
-    def evaluate(
-        self, model: DeepEvalBaseLLM, batch_size: Optional[int] = None
-    ) -> Dict:
-        with capture_benchmark_run("MamuramuQA", len(self.tasks)):
+        self.template = MultiQTemplate()
+
+    def evaluate(self, model: DeepEvalBaseLLM) -> Dict:
+        with capture_benchmark_run("MultiQ", len(self.tasks)):
             overall_correct_predictions = 0
             overall_total_predictions = 0
             predictions_row = []
             scores_row = []
-            #use_batch = should_use_batch(model, batch_size)
 
             for task in self.tasks:
                 goldens = self.load_benchmark_dataset(task)
@@ -72,34 +68,6 @@ class MamuramuQA(DeepEvalBaseBenchmark):
                 task_total_predictions = len(goldens)
                 overall_total_predictions += len(goldens)
 
-                # # Calculate task accuracy
-                # if use_batch:
-                #     for i in tqdm(
-                #         range(0, len(goldens), batch_size),
-                #         desc=f"Batch Processing {task.value} (batch_size={batch_size})",
-                #     ):
-                #         goldens_batch = goldens[i : i + batch_size]
-                #         batch_predictions = self.batch_predict(
-                #             model, goldens_batch
-                #         )
-                #         for golden, prediction_dict in zip(
-                #             goldens_batch, batch_predictions
-                #         ):
-                #             prediction = prediction_dict["prediction"]
-                #             score = prediction_dict["score"]
-                #             if score:
-                #                 task_correct_predictions += 1
-                #                 overall_correct_predictions += 1
-                #             predictions_row.append(
-                #                 (
-                #                     task.value,
-                #                     golden.input,
-                #                     prediction,
-                #                     golden.expected_output,
-                #                     score,
-                #                 )
-                #             )
-                # else:
                 for idx, golden in enumerate(
                     tqdm(goldens, desc=f"Processing {task.value}")
                 ):
@@ -130,7 +98,7 @@ class MamuramuQA(DeepEvalBaseBenchmark):
                     task_correct_predictions / task_total_predictions
                 )
                 print(
-                    f"MamuramuQA Task Accuracy (task={task.value}): {task_accuracy}"
+                    f"MultiQ Task Accuracy (task={task.value}): {task_accuracy}"
                 )
                 scores_row.append((task.value, task_accuracy))
 
@@ -138,7 +106,7 @@ class MamuramuQA(DeepEvalBaseBenchmark):
             overall_accuracy = (
                 overall_correct_predictions / overall_total_predictions
             )
-            print(f"Overall MamuramuQA Accuracy: {overall_accuracy}")
+            print(f"Overall MultiQ Accuracy: {overall_accuracy}")
 
             # Create a DataFrame from task_results_data
             # Columns: 'Task', 'Input', 'Prediction', 'Score'
@@ -168,15 +136,14 @@ class MamuramuQA(DeepEvalBaseBenchmark):
         )
 
         # Enforced model generation
-        try:
-            res: MultipleChoiceSchema = model.generate(
-                prompt=prompt, schema=MultipleChoiceSchema
-            )
-            prediction = res.answer
-        except TypeError:
-            if self.confinement_instructions:
-                prompt += f"\n\n{self.confinement_instructions}"
-            prediction = model.generate(prompt)
+        # try:
+        #     res: MultipleChoiceSchemaLower = model.generate(
+        #         prompt=prompt, schema=MultipleChoiceSchemaLower
+        #     )
+        #     prediction = res.answer
+        # except TypeError:
+        prompt += f"\n\n{self.confinement_instructions}"
+        prediction = model.generate(prompt)
 
         # For native models, shouldn't happen but just in case
         if isinstance(prediction, tuple):
@@ -184,71 +151,28 @@ class MamuramuQA(DeepEvalBaseBenchmark):
         prediction = str(prediction)
 
         # Define Metric
-        score = self.scorer.exact_match_score(
-            golden.expected_output, prediction
+        score = self.scorer.squad_score(
+            golden.input,
+            prediction,
+            golden.expected_output,
+            self.evaluation_model,
+            self.using_native_evaluation_model,
         )
         return {"prediction": prediction, "score": score}
 
-    # def batch_predict(
-    #     self, model: DeepEvalBaseLLM, goldens: List[Golden]
-    # ) -> List[Dict]:
-    #     # Define prompt template
-    #     prompts = []
-    #     for golden in goldens:
-    #         prompt: dict = self.template.generate_output(
-    #             input=golden.input,
-    #             n_shots=self.n_shots,
-    #             index=golden.index
-    #         )
-    #         prompts.append(prompt)
+    def load_benchmark_dataset(self, task: MultiQTask) -> List[Golden]:
+        dataset = load_dataset("MERA-evaluation/MERA", 'multiq')
+        self.dataset = dataset
 
-    #     # Enforced model generation
-    #     try:
-    #         responses: List[MultipleChoiceSchema] = model.batch_generate(
-    #             prompts=prompts,
-    #             schemas=[MultipleChoiceSchema for _ in prompts],
-    #         )
-    #         predictions = [res.answer for res in responses]
-    #     except TypeError:
-    #         prompts = [
-    #             prompt
-    #             + "\n\nOutput 'a', 'b', 'c', or 'd'. Full answer not needed."
-    #             for prompt in prompts
-    #         ]
-    #         predictions = model.batch_generate(prompts)
-
-    #     if len(predictions) is not len(goldens):
-    #         raise ValueError(
-    #             "Custom `batch_generate` method did not return the same number of generations as the number of prompts."
-    #         )
-
-    #     res = []
-    #     for i in range(len(predictions)):
-    #         prediction = predictions[i]
-    #         golden = goldens[i]
-    #         # Define Metric
-    #         score = self.scorer.exact_match_score(
-    #             golden.expected_output, prediction
-    #         )
-    #         res.append({"prediction": prediction, "score": score})
-
-    #     return res
-
-    def load_benchmark_dataset(self, task: MamuramuTask) -> List[Golden]:
-        if self.dataset:
-            dataset = self.dataset
-        else:
-            dataset = load_dataset("MERA-evaluation/MERA", 'mamuramu')
-            self.dataset = dataset
-
-        # Construct test set
         train_set = dataset["train"]
-        n_shot_indeces = [0, 25, 45, 70, 85, 95, 115, 135, 150, 170, 190, 195, 215, 250, 260]
+        # Construct test set
+        test_set = dataset["train"]
+        # test_set = dataset["train"].filter(
+        #     lambda data: data["title"] == task.value
+        # )
+        n_shot_indeces = [0, 25, 46, 70, 85, 95, 115, 135, 150, 170, 190, 195, 215, 250, 260]
         self.template.create_n_shot_examples(train_set, n_shot_indeces)
 
-        test_set = train_set.filter(
-            lambda data: data['inputs']["subject"] == task.value
-        )
         goldens: List[Golden] = []
         for index, data in enumerate(test_set):
             input = self.template.format_question(data, include_answer=False)

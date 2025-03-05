@@ -19,32 +19,15 @@ api_key = 'sk-1234'
 # In[3]:
 
 
-model = DeepEvalOpenAI(model=model_name, api_base=base_url, api_key=api_key, temperature=0, max_tokens=1)
+model = DeepEvalOpenAI(model=model_name, api_base=base_url, api_key=api_key, temperature=0, max_tokens=10)
 
 
 # In[5]:
 
 
-from deepeval.benchmarks.mera_mamuramu.mamuramu import MamuramuQA
-from deepeval.benchmarks.mera_mamuramu.task import MamuramuTask
+from deepeval.benchmarks.mera_bps.bps import BPS
 
-
-# In[6]:
-
-
-list(MamuramuTask)
-
-
-# In[7]:
-
-
-tasks = [MamuramuTask.Mathematics, MamuramuTask.Physics]
-
-
-# In[8]:
-
-
-benchmark = MamuramuQA(tasks=tasks)
+benchmark = BPS()
 #benchmark = MamuramuQA()
 
 
