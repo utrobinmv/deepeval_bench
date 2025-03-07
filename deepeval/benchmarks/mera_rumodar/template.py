@@ -1,7 +1,9 @@
 from datasets import Dataset
 
-from .task import UseQATask
-class UseQATemplate:
+from .task import RuModArQATask
+
+
+class RuModArQATemplate:
     test_set = None
     n_shot_examples = {}
 
@@ -22,7 +24,7 @@ class UseQATemplate:
     def generate_output(self, input: str, n_shots: int, index: int = None):
         prompt = ""
         data = self.test_set[index]
-        task = data['meta']['type']
+        task = data['meta']['task_type']
 
         for i in range(n_shots):
             one_shot = self.n_shot_examples[task][i]
@@ -38,13 +40,13 @@ class UseQATemplate:
     @staticmethod
     def format_question(data: dict, include_answer=True):
         instruction = data["instruction"]
-        inputs = data["inputs"]
+        inputs = {'inputs': data["inputs"]}
         # question = inputs.pop("text")
         # subject = inputs["subject"]
 
         correct = data["outputs"]
         meta = data["meta"]
-        task = data['meta']['type']
+        task = data['meta']['task_type']
 
         prompt = instruction.format(**inputs)
 
@@ -59,11 +61,11 @@ class UseQATemplate:
         #prompt += "\nОтвет: "
         if include_answer:
             prompt += " {}\n\n".format(correct)
-        else:
-            if task == UseQATask.Multiple_independent.value:
-                prompt += " Напиши только число без дополнительных пояснений."
-            if task == UseQATask.Multiple_within_text.value:
-                prompt += " В качестве ответа напиши только число или числа через запятую без пробелов и без дополнительных пояснений."
+        # else:
+        #     if task == RuModArQATask.Multiple_independent.value:
+        #         prompt += " Напиши только число без дополнительных пояснений."
+        #     if task == RuModArQATask.Multiple_within_text.value:
+        #         prompt += " В качестве ответа напиши только число или числа через запятую без пробелов и без дополнительных пояснений."
             
         return prompt
 

@@ -11,14 +11,14 @@ from deepeval.benchmarks.utils import should_use_batch
 from deepeval.benchmarks.schema import BaseModel, Literal
 from deepeval.telemetry import capture_benchmark_run
 
-from .task import UseQATask
-from .template import UseQATemplate
+from .task import RuModArQATask
+from .template import RuModArQATemplate
 
 
-class UseQA(DeepEvalBaseBenchmark):
+class RuModArQA(DeepEvalBaseBenchmark):
     def __init__(
         self,
-        tasks: List[UseQATask] = None,
+        tasks: List[RuModArQATask] = None,
         n_shots: int = 1,
         n_problems_per_task: Optional[int] = None,
         verbose_mode: bool = False,
@@ -27,17 +27,17 @@ class UseQA(DeepEvalBaseBenchmark):
     ):
         from deepeval.scorer import Scorer
 
-        assert n_shots <= 5, "UseQA only supports n_shots <= 5"
+        assert n_shots <= 5, "RuModArQA only supports n_shots <= 5"
         super().__init__(**kwargs)
-        self.tasks: List[UseQATask] = (
-            list(UseQATask) if tasks is None else tasks
+        self.tasks: List[RuModArQATask] = (
+            list(RuModArQATask) if tasks is None else tasks
         )
         self.n_problems_per_task: Optional[int] = n_problems_per_task
         self.scorer = Scorer()
         self.n_shots: int = n_shots
         self.predictions: Optional[pd.DataFrame] = None
 
-        self.template = UseQATemplate()
+        self.template = RuModArQATemplate()
 
         self.task_scores: Optional[pd.DataFrame] = None
         self.overall_score: Optional[float] = None
@@ -53,7 +53,7 @@ class UseQA(DeepEvalBaseBenchmark):
     def evaluate(
         self, model: DeepEvalBaseLLM, batch_size: Optional[int] = None
     ) -> Dict:
-        with capture_benchmark_run("UseQA", len(self.tasks)):
+        with capture_benchmark_run("RuModArQA", len(self.tasks)):
             overall_correct_predictions = 0
             overall_total_predictions = 0
             predictions_row = []
@@ -101,7 +101,7 @@ class UseQA(DeepEvalBaseBenchmark):
                     task_correct_predictions / task_total_predictions
                 )
                 print(
-                    f"UseQA Task Accuracy (task={task.value}): {task_accuracy}"
+                    f"RuModArQA Task Accuracy (task={task.value}): {task_accuracy}"
                 )
                 scores_row.append((task.value, task_accuracy))
 
@@ -109,7 +109,7 @@ class UseQA(DeepEvalBaseBenchmark):
             overall_accuracy = (
                 overall_correct_predictions / overall_total_predictions
             )
-            print(f"Overall UseQA Accuracy: {overall_accuracy}")
+            print(f"Overall RuModArQA Accuracy: {overall_accuracy}")
 
             # Create a DataFrame from task_results_data
             # Columns: 'Task', 'Input', 'Prediction', 'Score'
@@ -154,31 +154,32 @@ class UseQA(DeepEvalBaseBenchmark):
         )
         return {"prediction": prediction, "score": score}
 
-    def load_benchmark_dataset(self, task: UseQATask) -> List[Golden]:
+    def load_benchmark_dataset(self, task: RuModArQATask) -> List[Golden]:
         if self.dataset:
             dataset = self.dataset
         else:
-            dataset = load_dataset("MERA-evaluation/MERA", 'use')
+            dataset = load_dataset("MERA-evaluation/MERA", 'rumodar')
             self.dataset = dataset
 
         # Construct test set
-        train_set = dataset["train"]
-        n_shot_indeces = {'text': [1839, 2165, 2094, 1884, 1861, 2360, 1818, 2228, 
-                                   2357, 2479, 2466, 2244, 2281, 2527, 1960],
-                          'multiple_choice_independent_options': [1037, 1257, 1782, 1435, 
-                                                                  991, 1774, 1050, 1185,
-                                                                  1605, 999, 1302, 1001,
-                                                                  1716, 981, 1172],
-                          'multiple_choice_options_within_text': [900, 591, 389, 647,
-                                                                  848, 952, 837, 786,
-                                                                  547, 778, 814, 387,
-                                                                  594, 708, 780],
-                          'multiple_choice_based_on_text': [50, 2, 89, 178, 61, 310,
-                                                            67, 290, 64, 19, 185,
-                                                            121, 87, 56, 231],
-                          'matching': [2580, 2618, 2540, 2546, 2587, 2604,
-                                       2536, 2610, 2601, 2551, 2616, 2583,
-                                       2541, 2543, 2529]
+        train_set = dataset["public_test"]
+        n_shot_indeces = {RuModArQATask.ThreeDigitAddControl.value: 
+                          [493, 653, 753, 102, 942, 405, 285, 864, 539, 358, 611, 47, 825, 438, 599],
+                          RuModArQATask.ThreeDigitAddOne.value: 
+                          [1007, 1555, 1168, 1729, 1683, 1402, 1646, 1141, 1806, 1776,
+                           1509, 1096, 1889, 1907, 1412],
+                          RuModArQATask.ThreeDigitSubControl.value: 
+                          [2340, 2994, 2817, 2573, 2442, 2293, 2523, 2607, 2109,
+                           2216, 2978, 2714, 2022, 2583, 2744],
+                          RuModArQATask.ThreeDigitSubOne.value: 
+                          [3639, 3891, 3325, 3485, 3355, 3845, 3728, 3796,
+                           3572, 3373, 3916, 3632, 3583, 3567, 3066],
+                          RuModArQATask.TwoDigitMulControl.value: 
+                          [4237, 4376, 4099, 4948, 4904, 4395, 4714, 4830,
+                           4670, 4075, 4863, 4097, 4465, 4858, 4778],
+                          RuModArQATask.TwoDigitMulOne.value: 
+                          [5517, 5046, 5383, 5262, 5479, 5566, 5629, 5389,
+                           5715, 5282, 5396, 5963, 5408, 5251, 5128]
                           }
 
         def add_index(example, idx): return {"index": idx}
@@ -187,7 +188,7 @@ class UseQA(DeepEvalBaseBenchmark):
         self.template.create_n_shot_examples(train_set, n_shot_indeces)
 
         test_set = train_set.filter(
-            lambda data: data['meta']["type"] == task.value
+            lambda data: data['meta']["task_type"] == task.value
         )
         goldens: List[Golden] = []
         for data in test_set:

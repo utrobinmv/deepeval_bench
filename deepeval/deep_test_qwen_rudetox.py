@@ -19,10 +19,10 @@ api_key = 'sk-1234'
 
 model = DeepEvalOpenAI(model=model_name, api_base=base_url, api_key=api_key, temperature=0, max_tokens=1024)
 
-from deepeval.benchmarks.mera_multiq.multiq import MultiQ
+from deepeval.benchmarks.mera_rudetox.rudetox import RuDetox
 
-#benchmark = MultiQ(n_shots=4, n_problems_per_task=5)
-benchmark = MultiQ(n_shots=3)
+benchmark = RuDetox(n_shots=4, n_problems_per_task=5)
+#benchmark = RuDetox(n_shots=3)
 
 results = benchmark.evaluate(model=model)
 

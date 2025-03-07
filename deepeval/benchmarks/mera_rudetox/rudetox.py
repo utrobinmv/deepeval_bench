@@ -1,64 +1,61 @@
 from datasets import load_dataset
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from tqdm import tqdm
 import pandas as pd
 
 from deepeval.dataset import Golden
 from deepeval.benchmarks.base_benchmark import DeepEvalBaseBenchmark
 from deepeval.models import DeepEvalBaseLLM
-from deepeval.benchmarks.utils import should_use_batch
 #from deepeval.benchmarks.schema import MultipleChoiceSchemaLower
-from deepeval.benchmarks.schema import BaseModel, Literal
 from deepeval.telemetry import capture_benchmark_run
+from deepeval.metrics.utils import initialize_model
 
-from .task import UseQATask
-from .template import UseQATemplate
+from .task import RuDetoxTask
+from .template import RuDetoxTemplate
 
 
-class UseQA(DeepEvalBaseBenchmark):
+class RuDetox(DeepEvalBaseBenchmark):
     def __init__(
         self,
-        tasks: List[UseQATask] = None,
-        n_shots: int = 1,
+        tasks: List[RuDetoxTask] = None,
+        n_shots: int = 3,
         n_problems_per_task: Optional[int] = None,
+        evaluation_model: Optional[Union[str, DeepEvalBaseLLM]] = None,
         verbose_mode: bool = False,
         confinement_instructions: Optional[str] = None,
         **kwargs,
     ):
         from deepeval.scorer import Scorer
 
-        assert n_shots <= 5, "UseQA only supports n_shots <= 5"
+        assert n_shots <= 5, "RuDetox only supports n_shots <= 5"
         super().__init__(**kwargs)
-        self.tasks: List[UseQATask] = (
-            list(UseQATask) if tasks is None else tasks
+        self.tasks: List[RuDetoxTask] = (
+            list(RuDetoxTask) if tasks is None else tasks
         )
         self.n_problems_per_task: Optional[int] = n_problems_per_task
         self.scorer = Scorer()
         self.n_shots: int = n_shots
         self.predictions: Optional[pd.DataFrame] = None
-
-        self.template = UseQATemplate()
-
         self.task_scores: Optional[pd.DataFrame] = None
         self.overall_score: Optional[float] = None
-        self.verbose_mode = verbose_mode
-        # if not confinement_instructions:
-        #     self.confinement_instructions = (
-        #         "Output 'a', 'b', 'c', or 'd'. Full answer not needed."
-        #     )
-        # else:
+        self.evaluation_model, self.using_native_evaluation_model = (
+            initialize_model(evaluation_model)
+        )
+        self.verbose_mode: bool = verbose_mode
+        if not confinement_instructions:
+            #self.confinement_instructions = "Output the answer, which should a text segment taken from the context."
+            self.confinement_instructions = ""
+        else:
+            self.confinement_instructions = confinement_instructions
 
-        self.confinement_instructions = confinement_instructions
+        self.template = RuDetoxTemplate()
 
-    def evaluate(
-        self, model: DeepEvalBaseLLM, batch_size: Optional[int] = None
-    ) -> Dict:
-        with capture_benchmark_run("UseQA", len(self.tasks)):
+    def evaluate(self, model: DeepEvalBaseLLM) -> Dict:
+        with capture_benchmark_run("RuDetox", len(self.tasks)):
             overall_correct_predictions = 0
             overall_total_predictions = 0
             predictions_row = []
             scores_row = []
-            #use_batch = should_use_batch(model, batch_size)
 
             for task in self.tasks:
                 goldens = self.load_benchmark_dataset(task)
@@ -101,7 +98,7 @@ class UseQA(DeepEvalBaseBenchmark):
                     task_correct_predictions / task_total_predictions
                 )
                 print(
-                    f"UseQA Task Accuracy (task={task.value}): {task_accuracy}"
+                    f"RuDetox Task Accuracy (task={task.value}): {task_accuracy}"
                 )
                 scores_row.append((task.value, task_accuracy))
 
@@ -109,7 +106,7 @@ class UseQA(DeepEvalBaseBenchmark):
             overall_accuracy = (
                 overall_correct_predictions / overall_total_predictions
             )
-            print(f"Overall UseQA Accuracy: {overall_accuracy}")
+            print(f"Overall RuDetox Accuracy: {overall_accuracy}")
 
             # Create a DataFrame from task_results_data
             # Columns: 'Task', 'Input', 'Prediction', 'Score'
@@ -139,8 +136,13 @@ class UseQA(DeepEvalBaseBenchmark):
         )
 
         # Enforced model generation
-        if self.confinement_instructions:
-            prompt += f"\n\n{self.confinement_instructions}"
+        # try:
+        #     res: MultipleChoiceSchemaLower = model.generate(
+        #         prompt=prompt, schema=MultipleChoiceSchemaLower
+        #     )
+        #     prediction = res.answer
+        # except TypeError:
+        prompt += f"\n\n{self.confinement_instructions}"
         prediction = model.generate(prompt)
 
         # For native models, shouldn't happen but just in case
@@ -149,46 +151,32 @@ class UseQA(DeepEvalBaseBenchmark):
         prediction = str(prediction)
 
         # Define Metric
-        score = self.scorer.exact_match_score(
-            golden.expected_output, prediction
+        score = self.scorer.squad_score(
+            golden.input,
+            prediction,
+            golden.expected_output,
+            self.evaluation_model,
+            self.using_native_evaluation_model,
         )
         return {"prediction": prediction, "score": score}
 
-    def load_benchmark_dataset(self, task: UseQATask) -> List[Golden]:
-        if self.dataset:
-            dataset = self.dataset
-        else:
-            dataset = load_dataset("MERA-evaluation/MERA", 'use')
-            self.dataset = dataset
+    def load_benchmark_dataset(self, task: RuDetoxTask) -> List[Golden]:
+        dataset = load_dataset("MERA-evaluation/MERA", 'rudetox')
+        self.dataset = dataset
 
-        # Construct test set
         train_set = dataset["train"]
-        n_shot_indeces = {'text': [1839, 2165, 2094, 1884, 1861, 2360, 1818, 2228, 
-                                   2357, 2479, 2466, 2244, 2281, 2527, 1960],
-                          'multiple_choice_independent_options': [1037, 1257, 1782, 1435, 
-                                                                  991, 1774, 1050, 1185,
-                                                                  1605, 999, 1302, 1001,
-                                                                  1716, 981, 1172],
-                          'multiple_choice_options_within_text': [900, 591, 389, 647,
-                                                                  848, 952, 837, 786,
-                                                                  547, 778, 814, 387,
-                                                                  594, 708, 780],
-                          'multiple_choice_based_on_text': [50, 2, 89, 178, 61, 310,
-                                                            67, 290, 64, 19, 185,
-                                                            121, 87, 56, 231],
-                          'matching': [2580, 2618, 2540, 2546, 2587, 2604,
-                                       2536, 2610, 2601, 2551, 2616, 2583,
-                                       2541, 2543, 2529]
-                          }
 
         def add_index(example, idx): return {"index": idx}
         train_set = train_set.map(add_index, with_indices=True)
 
+        # Construct test set
+        test_set = train_set
+        # test_set = dataset["train"].filter(
+        #     lambda data: data["title"] == task.value
+        # )
+        n_shot_indeces = [0, 25, 46, 70, 85, 95, 115, 135, 150, 170, 190, 195, 215, 250, 260]
         self.template.create_n_shot_examples(train_set, n_shot_indeces)
 
-        test_set = train_set.filter(
-            lambda data: data['meta']["type"] == task.value
-        )
         goldens: List[Golden] = []
         for data in test_set:
             index = data['index']

@@ -172,6 +172,10 @@ class MathLogicQA(DeepEvalBaseBenchmark):
 
         # Construct test set
         train_set = dataset["train"]
+
+        def add_index(example, idx): return {"index": idx}
+        train_set = train_set.map(add_index, with_indices=True)
+
         n_shot_indeces = [0, 25, 45, 70, 85, 95, 115, 135, 150, 170, 190, 195, 215, 250, 260]
         self.template.create_n_shot_examples(train_set, n_shot_indeces)
 
@@ -179,7 +183,8 @@ class MathLogicQA(DeepEvalBaseBenchmark):
             lambda data: data['meta']["task"] == task.value
         )
         goldens: List[Golden] = []
-        for index, data in enumerate(test_set):
+        for data in test_set:
+            index = data['index']
             input = self.template.format_question(data, include_answer=False)
             expected_output = self.template.format_output(data)
             golden = Golden(input=input, expected_output=expected_output, index=index)

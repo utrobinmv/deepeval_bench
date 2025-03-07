@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-
-#!deepeval set-local-model --model-name="gpt-3.5-turbo" \
-#    --base-url="http://192.168.45.70:8000/v1/" \
-#    --api-key="sk-1234"
-
 from src.load_model import DeepEvalOpenAI
 
 model_name = 'arcee-ai-Arcee-Agent-AWQ-4bit-smashed'
@@ -19,19 +14,17 @@ api_key = 'sk-1234'
 
 model = DeepEvalOpenAI(model=model_name, api_base=base_url, api_key=api_key, temperature=0, max_tokens=1024)
 
-from deepeval.benchmarks.mera_multiq.multiq import MultiQ
+from deepeval.benchmarks.mera_rumodar.rumodar import RuModArQA
+from deepeval.benchmarks.mera_rumodar.task import RuModArQATask
 
-#benchmark = MultiQ(n_shots=4, n_problems_per_task=5)
-benchmark = MultiQ(n_shots=3)
+tasks = [RuModArQATask.TwoDigitMulOne]
+
+#benchmark = RuModArQA(tasks=tasks, n_problems_per_task=5, n_shots=0)
+#benchmark = RuModArQA(tasks=tasks)
+benchmark = RuModArQA(tasks=tasks, n_shots=0)
 
 results = benchmark.evaluate(model=model)
 
 print("Overall Score: ", results)
-
-
-# In[ ]:
-
-
-
 
 

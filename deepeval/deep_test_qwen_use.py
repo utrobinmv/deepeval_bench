@@ -17,10 +17,16 @@ model = DeepEvalOpenAI(model=model_name, api_base=base_url, api_key=api_key, tem
 from deepeval.benchmarks.mera_use.use import UseQA
 from deepeval.benchmarks.mera_use.task import UseQATask
 
-tasks = [UseQATask.Text, UseQATask.Multiple_independent]
+#tasks = [UseQATask.Text, UseQATask.Multiple_independent]
+#tasks = [UseQATask.Text]
+#tasks = [UseQATask.Multiple_independent]
+#tasks = [UseQATask.Multiple_within_text]
+#tasks = [UseQATask.Multiple_text]
+tasks = [UseQATask.Matching]
 
-benchmark = UseQA(tasks=tasks, n_problems_per_task=5)
+benchmark = UseQA(tasks=tasks, n_problems_per_task=5, n_shots=0)
 #benchmark = UseQA(tasks=tasks)
+benchmark = UseQA(tasks=tasks, n_shots=0)
 
 results = benchmark.evaluate(model=model)
 
